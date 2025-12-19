@@ -1,5 +1,7 @@
-use iced::widget::{Column, button, column, container, row, text};
-use iced::{Background, Color, Element};
+use iced::mouse::Cursor;
+use iced::widget::canvas::{self, Canvas};
+use iced::widget::{Column, button, column, container, row};
+use iced::{Color, Point, Rectangle, Renderer, Size, Theme};
 use rand::prelude::*;
 use std::time::Instant;
 
@@ -9,6 +11,13 @@ pub struct Map {
     pub height: usize,
     pub tiles: Vec<Vec<Tile>>,
     pub player: Player,
+    tiles_cache: canvas::Cache,
+}
+
+impl Map {
+    fn clear_tiles_cache(&mut self) {
+        self.tiles_cache.clear();
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +71,7 @@ impl Map {
             height,
             player,
             tiles: Map::create_maze(width, height),
+            tiles_cache: canvas::Cache::default(),
         }
     }
 
@@ -82,134 +92,13 @@ impl Map {
     }
 
     pub fn view(&'_ self) -> Column<'_, Message> {
-        let start = Instant::now();
+        let view_start = Instant::now();
 
-        // Build the grid of tiles
-        let mut grid_column = column![];
-
-        for y in 0..self.height {
-            let mut grid_row = row![];
-
-            for x in 0..self.width {
-                let tile = &self.tiles[x][y];
-
-                // Check if this is the player's position
-                if self.player.position.x == x && self.player.position.y == y {
-                    // Player tile (red) with directional indicator
-                    let direction_indicator = match self.player.direction {
-                        Direction::Up => container("")
-                            .width(SQUARE_SIZE)
-                            .height(DIRECTION_INDICATOR_SIZE)
-                            .style(|_theme| container::Style {
-                                background: Some(Background::Color(Color::from_rgb(0.9, 0.9, 0.0))),
-                                ..Default::default()
-                            }),
-                        Direction::Down => container("")
-                            .width(SQUARE_SIZE)
-                            .height(DIRECTION_INDICATOR_SIZE)
-                            .style(|_theme| container::Style {
-                                background: Some(Background::Color(Color::from_rgb(0.9, 0.9, 0.0))),
-                                ..Default::default()
-                            }),
-                        Direction::Right => container("")
-                            .width(DIRECTION_INDICATOR_SIZE)
-                            .height(SQUARE_SIZE)
-                            .style(|_theme| container::Style {
-                                background: Some(Background::Color(Color::from_rgb(0.9, 0.9, 0.0))),
-                                ..Default::default()
-                            }),
-                        Direction::Left => container("")
-                            .width(DIRECTION_INDICATOR_SIZE)
-                            .height(SQUARE_SIZE)
-                            .style(|_theme| container::Style {
-                                background: Some(Background::Color(Color::from_rgb(0.9, 0.9, 0.0))),
-                                ..Default::default()
-                            }),
-                    };
-
-                    let player_element: Element<Message> = match self.player.direction {
-                        Direction::Up => column![
-                            direction_indicator,
-                            container("")
-                                .width(SQUARE_SIZE)
-                                .height(SQUARE_SIZE - DIRECTION_INDICATOR_SIZE)
-                                .style(|_theme| container::Style {
-                                    background: Some(Background::Color(Color::from_rgb(
-                                        1.0, 0.0, 0.0
-                                    ))),
-                                    ..Default::default()
-                                }),
-                        ]
-                        .into(),
-                        Direction::Down => column![
-                            container("")
-                                .width(SQUARE_SIZE)
-                                .height(SQUARE_SIZE - DIRECTION_INDICATOR_SIZE)
-                                .style(|_theme| container::Style {
-                                    background: Some(Background::Color(Color::from_rgb(
-                                        1.0, 0.0, 0.0
-                                    ))),
-                                    ..Default::default()
-                                }),
-                            direction_indicator,
-                        ]
-                        .into(),
-                        Direction::Right => row![
-                            container("")
-                                .width(SQUARE_SIZE - DIRECTION_INDICATOR_SIZE)
-                                .height(SQUARE_SIZE)
-                                .style(|_theme| container::Style {
-                                    background: Some(Background::Color(Color::from_rgb(
-                                        1.0, 0.0, 0.0
-                                    ))),
-                                    ..Default::default()
-                                }),
-                            direction_indicator,
-                        ]
-                        .into(),
-                        Direction::Left => row![
-                            direction_indicator,
-                            container("")
-                                .width(SQUARE_SIZE - DIRECTION_INDICATOR_SIZE)
-                                .height(SQUARE_SIZE)
-                                .style(|_theme| container::Style {
-                                    background: Some(Background::Color(Color::from_rgb(
-                                        1.0, 0.0, 0.0
-                                    ))),
-                                    ..Default::default()
-                                }),
-                        ]
-                        .into(),
-                    };
-
-                    grid_row = grid_row.push(
-                        container(player_element)
-                            .height(SQUARE_SIZE)
-                            .width(SQUARE_SIZE),
-                    );
-                } else {
-                    // Regular tile
-                    let color = if tile.walkable {
-                        Color::WHITE
-                    } else {
-                        Color::BLACK
-                    };
-
-                    grid_row =
-                        grid_row.push(container("").height(SQUARE_SIZE).width(SQUARE_SIZE).style(
-                            move |_theme| container::Style {
-                                background: Some(Background::Color(color)),
-                                ..Default::default()
-                            },
-                        ));
-                }
-            }
-
-            grid_column = grid_column.push(grid_row);
-        }
+        let canvas_width = (self.width as u32 * SQUARE_SIZE) as f32;
+        let canvas_height = (self.height as u32 * SQUARE_SIZE) as f32;
 
         column![
-            grid_column,
+            Canvas::new(self).width(canvas_width).height(canvas_height),
             row![
                 button("Reset").on_press(Message::Reset),
                 column![
@@ -242,16 +131,15 @@ impl Map {
                     ],
                 ]
             ],
-            text(format!(
-                "UI render time: {:.2}ms",
-                start.elapsed().as_secs_f64() * 1000.0
-            )),
         ]
     }
 
     pub fn update(&mut self, message: Message) {
         match message {
-            Message::Reset => self.tiles = Map::create_maze(self.width, self.height),
+            Message::Reset => {
+                self.tiles = Map::create_maze(self.width, self.height);
+                self.clear_tiles_cache();
+            }
             Message::Up => {
                 if self.player.direction == Direction::Up {
                     if self.player.position.y > 0 {
@@ -312,5 +200,95 @@ impl Map {
 impl Default for Map {
     fn default() -> Self {
         Map::new(DEFAULT_WIDTH, DEFAULT_HIGHT)
+    }
+}
+
+impl canvas::Program<Message> for Map {
+    type State = ();
+
+    fn draw(
+        &self,
+        _state: &Self::State,
+        renderer: &Renderer,
+        _theme: &Theme,
+        bounds: Rectangle,
+        _cursor: Cursor,
+    ) -> Vec<canvas::Geometry> {
+        let draw_start = Instant::now();
+        let square_size = SQUARE_SIZE as f32;
+        let direction_size = DIRECTION_INDICATOR_SIZE as f32;
+
+        // Draw static tiles (cached)
+        let tiles_geometry = self.tiles_cache.draw(renderer, bounds.size(), |frame| {
+            let compute_start = Instant::now();
+            for y in 0..self.height {
+                for x in 0..self.width {
+                    let tile = &self.tiles[x][y];
+                    let pos_x = x as f32 * square_size;
+                    let pos_y = y as f32 * square_size;
+
+                    let color = if tile.walkable {
+                        Color::WHITE
+                    } else {
+                        Color::BLACK
+                    };
+                    frame.fill_rectangle(
+                        Point::new(pos_x, pos_y),
+                        Size::new(square_size, square_size),
+                        color,
+                    );
+                }
+            }
+            println!(
+                "Tiles cache rebuild | Compute: {:.3}ms | Draw: {:.2}ms",
+                compute_start.elapsed().as_secs_f64() * 1000.0,
+                draw_start.elapsed().as_secs_f64() * 1000.0
+            );
+        });
+
+        // Draw player (not cached)
+        let player_geometry = canvas::Cache::default().draw(renderer, bounds.size(), |frame| {
+            let pos_x = self.player.position.x as f32 * square_size;
+            let pos_y = self.player.position.y as f32 * square_size;
+
+            // Player background
+            frame.fill_rectangle(
+                Point::new(pos_x, pos_y),
+                Size::new(square_size, square_size),
+                Color::from_rgb(1.0, 0.0, 0.0),
+            );
+
+            // Direction indicator
+            let indicator_color = Color::from_rgb(0.9, 0.9, 0.0);
+            match self.player.direction {
+                Direction::Up => frame.fill_rectangle(
+                    Point::new(pos_x, pos_y),
+                    Size::new(square_size, direction_size),
+                    indicator_color,
+                ),
+                Direction::Down => frame.fill_rectangle(
+                    Point::new(pos_x, pos_y + square_size - direction_size),
+                    Size::new(square_size, direction_size),
+                    indicator_color,
+                ),
+                Direction::Left => frame.fill_rectangle(
+                    Point::new(pos_x, pos_y),
+                    Size::new(direction_size, square_size),
+                    indicator_color,
+                ),
+                Direction::Right => frame.fill_rectangle(
+                    Point::new(pos_x + square_size - direction_size, pos_y),
+                    Size::new(direction_size, square_size),
+                    indicator_color,
+                ),
+            }
+
+            println!(
+                "Player draw: {:.3}ms",
+                draw_start.elapsed().as_secs_f64() * 1000.0
+            );
+        });
+
+        vec![tiles_geometry, player_geometry]
     }
 }
