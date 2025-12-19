@@ -1,6 +1,6 @@
 use iced::widget::canvas::{self, Cache};
 use iced::{Color, Point, Renderer, Size};
-use logic::GameState;
+use logic::{GameState, TileType};
 use std::time::Instant;
 
 const SQUARE_SIZE: u32 = 20;
@@ -24,12 +24,10 @@ impl MapView {
                     let pos_x = x as f32 * square_size;
                     let pos_y = y as f32 * square_size;
 
-                    let color = if tile.is_goal {
-                        Color::from_rgb(0.0, 1.0, 0.0)
-                    } else if tile.walkable {
-                        Color::WHITE
-                    } else {
-                        Color::BLACK
+                    let color = match tile.tile_type {
+                        TileType::Goal => Color::from_rgb(0.0, 1.0, 0.0),
+                        TileType::Walkable => Color::WHITE,
+                        TileType::Wall => Color::BLACK,
                     };
                     frame.fill_rectangle(
                         Point::new(pos_x, pos_y),

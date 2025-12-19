@@ -1,5 +1,5 @@
 use rand::prelude::*;
-use crate::types::{Tile, Position, Direction, Player, Action};
+use crate::types::{Tile, Position, Direction, Player, Action, Observation, TileType};
 
 #[derive(Debug)]
 pub struct GameState {
@@ -42,7 +42,7 @@ impl GameState {
         }
 
         // Mark goal tile
-        tiles[goal.x][goal.y].is_goal = true;
+        tiles[goal.x][goal.y].tile_type = TileType::Goal;
 
         GameState {
             width,
@@ -77,7 +77,7 @@ impl GameState {
             }
 
             let tile = &self.tiles[x as usize][y as usize];
-            if !tile.walkable {
+            if tile.tile_type == TileType::Wall {
                 break;
             }
 
@@ -96,8 +96,11 @@ impl GameState {
             .map(|_| {
                 (0..height)
                     .map(|_| Tile {
-                        walkable: rng.random_bool(0.8),
-                        is_goal: false,
+                        tile_type: if rng.random_bool(0.8) {
+                            TileType::Walkable
+                        } else {
+                            TileType::Wall
+                        },
                     })
                     .collect()
             })
@@ -116,7 +119,7 @@ impl GameState {
                 if self.player.direction == Direction::Up {
                     if self.player.position.y > 0 {
                         let tile = &self.tiles[self.player.position.x][self.player.position.y - 1];
-                        if tile.walkable {
+                        if tile.tile_type != TileType::Wall {
                             self.player.position.y -= 1;
                             self.check_goal();
                         }
@@ -129,7 +132,7 @@ impl GameState {
                 if self.player.direction == Direction::Down {
                     if self.player.position.y < self.height - 1 {
                         let tile = &self.tiles[self.player.position.x][self.player.position.y + 1];
-                        if tile.walkable {
+                        if tile.tile_type != TileType::Wall {
                             self.player.position.y += 1;
                             self.check_goal();
                         }
@@ -142,7 +145,7 @@ impl GameState {
                 if self.player.direction == Direction::Right {
                     if self.player.position.x < self.width - 1 {
                         let tile = &self.tiles[self.player.position.x + 1][self.player.position.y];
-                        if tile.walkable {
+                        if tile.tile_type != TileType::Wall {
                             self.player.position.x += 1;
                             self.check_goal();
                         }
@@ -155,7 +158,7 @@ impl GameState {
                 if self.player.direction == Direction::Left {
                     if self.player.position.x > 0 {
                         let tile = &self.tiles[self.player.position.x - 1][self.player.position.y];
-                        if tile.walkable {
+                        if tile.tile_type != TileType::Wall {
                             self.player.position.x -= 1;
                             self.check_goal();
                         }
@@ -176,5 +179,39 @@ impl GameState {
 
     pub fn reset(&mut self) {
         *self = GameState::new(self.width, self.height);
+    }
+
+    pub fn get_observation(&self) -> Observation {
+        let mut visible_tiles = Vec::new();
+        let (dx, dy) = match self.player.direction {
+            Direction::Up => (0, -1),
+            Direction::Down => (0, 1),
+            Direction::Left => (-1, 0),
+            Direction::Right => (1, 0),
+        };
+        let mut x = self.player.position.x as isize;
+        let mut y = self.player.position.y as isize;
+
+        for _ in 0..3 {
+            x += dx;
+            y += dy;
+
+            if x < 0 || y < 0 || x >= self.width as isize || y >= self.height as isize {
+                visible_tiles.push(TileType::Wall);
+                break;
+            }
+
+            let tile = &self.tiles[x as usize][y as usize];
+            visible_tiles.push(tile.tile_type);
+
+            if tile.tile_type == TileType::Wall {
+                break;
+            }
+        }
+
+        Observation {
+            direction: self.player.direction,
+            visible_tiles,
+        }
     }
 }

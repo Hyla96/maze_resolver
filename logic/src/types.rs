@@ -1,7 +1,13 @@
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TileType {
+    Wall,
+    Walkable,
+    Goal,
+}
+
 #[derive(Debug, Clone)]
 pub struct Tile {
-    pub walkable: bool,
-    pub is_goal: bool,
+    pub tile_type: TileType,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -30,4 +36,10 @@ pub enum Action {
     Down,
     Right,
     Left,
+}
+
+#[derive(Debug, Clone)]
+pub struct Observation {
+    pub direction: Direction,
+    pub visible_tiles: Vec<TileType>,
 }
