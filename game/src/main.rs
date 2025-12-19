@@ -1,9 +1,11 @@
-mod map;
+mod types;
+mod game_state;
+mod ui;
 
 use iced::keyboard::{Event as KeyboardEvent, Key, key};
 use iced::widget::container;
 use iced::{Element, Event, Result, Subscription, Task};
-use map::{Map, Message};
+use ui::{Map, Message};
 
 fn main() -> Result {
     iced::application(Map::default, update, view)
