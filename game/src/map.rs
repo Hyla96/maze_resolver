@@ -324,8 +324,38 @@ impl canvas::Program<Message> for Map {
                 ),
             }
 
-            let player_view = self.get_player_view();
-            println!("Player view tiles: {:#?}", player_view);
+            // Draw player view overlay
+            let (dx, dy) = match self.player.direction {
+                Direction::Up => (0, -1),
+                Direction::Down => (0, 1),
+                Direction::Left => (-1, 0),
+                Direction::Right => (1, 0),
+            };
+            let mut x = self.player.position.x as isize;
+            let mut y = self.player.position.y as isize;
+
+            for _ in 0..3 {
+                x += dx;
+                y += dy;
+
+                if x < 0 || y < 0 || x >= self.width as isize || y >= self.height as isize {
+                    break;
+                }
+
+                let tile = &self.tiles[x as usize][y as usize];
+                if !tile.walkable {
+                    break;
+                }
+
+                let view_x = x as f32 * square_size;
+                let view_y = y as f32 * square_size;
+
+                frame.fill_rectangle(
+                    Point::new(view_x, view_y),
+                    Size::new(square_size, square_size),
+                    Color::from_rgba(1.0, 1.0, 0.0, 0.3),
+                );
+            }
 
             println!(
                 "Player draw: {:.3}ms",
