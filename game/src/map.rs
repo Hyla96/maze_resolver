@@ -11,6 +11,8 @@ pub struct Map {
     pub height: usize,
     pub tiles: Vec<Vec<Tile>>,
     pub player: Player,
+    pub goal: Position,
+    pub game_over: bool,
     tiles_cache: canvas::Cache,
 }
 
@@ -23,9 +25,10 @@ impl Map {
 #[derive(Debug, Clone)]
 pub struct Tile {
     pub walkable: bool,
+    pub is_goal: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Position {
     pub x: usize,
     pub y: usize,
@@ -57,14 +60,14 @@ pub enum Message {
 const SQUARE_SIZE: u32 = 20;
 const DIRECTION_INDICATOR_SIZE: u32 = 4;
 const BUTTON_SIZE: u32 = 30;
-const DEFAULT_WIDTH: usize = 350;
+const DEFAULT_WIDTH: usize = 50;
 const DEFAULT_HIGHT: usize = 30;
 
 impl Map {
     pub fn new(width: usize, height: usize) -> Self {
         let mut rng = rand::rng();
 
-        let tiles = Map::create_maze(width, height);
+        let mut tiles = Map::create_maze(width, height);
 
         let direction = Direction::Up;
 
@@ -78,19 +81,37 @@ impl Map {
             position,
         };
 
+        // Generate goal position different from player
+        let mut goal = Position {
+            x: rng.random_range(..width),
+            y: rng.random_range(..height),
+        };
+        while goal.x == position.x && goal.y == position.y {
+            goal = Position {
+                x: rng.random_range(..width),
+                y: rng.random_range(..height),
+            };
+        }
+
+        // Mark goal tile
+        tiles[goal.x][goal.y].is_goal = true;
+
         Map {
             width,
             height,
             player,
+            goal,
+            game_over: false,
             tiles,
             tiles_cache: canvas::Cache::default(),
         }
     }
 
-    pub fn get_player_view(&self) -> Vec<Tile> {
-        // returns up to 3 tiles in front of the player based on direction, if a non-walkable tile is found, stop adding tiles
+    pub fn get_player_view(&self) -> Vec<Position> {
+        // returns up to 3 positions in front of the player based on direction
+        // stops at walls or non-walkable tiles
 
-        let mut view_tiles = Vec::new();
+        let mut view_positions = Vec::new();
         let (dx, dy) = match self.player.direction {
             Direction::Up => (0, -1),
             Direction::Down => (0, 1),
@@ -109,14 +130,17 @@ impl Map {
             }
 
             let tile = &self.tiles[x as usize][y as usize];
-            view_tiles.push(tile.clone());
-
             if !tile.walkable {
                 break;
             }
+
+            view_positions.push(Position {
+                x: x as usize,
+                y: y as usize,
+            });
         }
 
-        view_tiles
+        view_positions
     }
 
     pub fn create_maze(width: usize, height: usize) -> Vec<Vec<Tile>> {
@@ -126,6 +150,7 @@ impl Map {
                 (0..height)
                     .map(|_| Tile {
                         walkable: rng.random_bool(0.8),
+                        is_goal: false,
                     })
                     .collect()
             })
@@ -176,10 +201,13 @@ impl Map {
     }
 
     pub fn update(&mut self, message: Message) {
+        if self.game_over {
+            return;
+        }
+
         match message {
             Message::Reset => {
-                self.tiles = Map::create_maze(self.width, self.height);
-                self.clear_tiles_cache();
+                *self = Map::new(self.width, self.height);
             }
             Message::Up => {
                 if self.player.direction == Direction::Up {
@@ -187,7 +215,7 @@ impl Map {
                         let tile = &self.tiles[self.player.position.x][self.player.position.y - 1];
                         if tile.walkable {
                             self.player.position.y -= 1;
-                            println!("Position is {:#?}", self.player.position)
+                            self.check_goal();
                         }
                     }
                 } else {
@@ -201,7 +229,7 @@ impl Map {
 
                         if tile.walkable {
                             self.player.position.y += 1;
-                            println!("Position is {:#?}", self.player.position)
+                            self.check_goal();
                         }
                     }
                 } else {
@@ -214,7 +242,7 @@ impl Map {
                         let tile = &self.tiles[self.player.position.x + 1][self.player.position.y];
                         if tile.walkable {
                             self.player.position.x += 1;
-                            println!("Position is {:#?}", self.player.position)
+                            self.check_goal();
                         }
                     }
                 } else {
@@ -227,13 +255,20 @@ impl Map {
                         let tile = &self.tiles[self.player.position.x - 1][self.player.position.y];
                         if tile.walkable {
                             self.player.position.x -= 1;
-                            println!("Position is {:#?}", self.player.position)
+                            self.check_goal();
                         }
                     }
                 } else {
                     self.player.direction = Direction::Left
                 }
             }
+        }
+    }
+
+    fn check_goal(&mut self) {
+        if self.player.position.x == self.goal.x && self.player.position.y == self.goal.y {
+            self.game_over = true;
+            println!("Goal reached! Game over!");
         }
     }
 }
@@ -268,7 +303,9 @@ impl canvas::Program<Message> for Map {
                     let pos_x = x as f32 * square_size;
                     let pos_y = y as f32 * square_size;
 
-                    let color = if tile.walkable {
+                    let color = if tile.is_goal {
+                        Color::from_rgb(0.0, 1.0, 0.0)
+                    } else if tile.walkable {
                         Color::WHITE
                     } else {
                         Color::BLACK
@@ -325,30 +362,10 @@ impl canvas::Program<Message> for Map {
             }
 
             // Draw player view overlay
-            let (dx, dy) = match self.player.direction {
-                Direction::Up => (0, -1),
-                Direction::Down => (0, 1),
-                Direction::Left => (-1, 0),
-                Direction::Right => (1, 0),
-            };
-            let mut x = self.player.position.x as isize;
-            let mut y = self.player.position.y as isize;
-
-            for _ in 0..3 {
-                x += dx;
-                y += dy;
-
-                if x < 0 || y < 0 || x >= self.width as isize || y >= self.height as isize {
-                    break;
-                }
-
-                let tile = &self.tiles[x as usize][y as usize];
-                if !tile.walkable {
-                    break;
-                }
-
-                let view_x = x as f32 * square_size;
-                let view_y = y as f32 * square_size;
+            let view_positions = self.get_player_view();
+            for pos in view_positions {
+                let view_x = pos.x as f32 * square_size;
+                let view_y = pos.y as f32 * square_size;
 
                 frame.fill_rectangle(
                     Point::new(view_x, view_y),
