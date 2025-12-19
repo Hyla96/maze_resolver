@@ -48,8 +48,8 @@ pub enum Message {
 const SQUARE_SIZE: u32 = 20;
 const DIRECTION_INDICATOR_SIZE: u32 = 4;
 const BUTTON_SIZE: u32 = 30;
-const DEFAULT_WIDTH: usize = 2;
-const DEFAULT_HIGHT: usize = 7;
+const DEFAULT_WIDTH: usize = 350;
+const DEFAULT_HIGHT: usize = 30;
 
 impl Map {
     pub fn new(width: usize, height: usize) -> Self {
