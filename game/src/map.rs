@@ -62,15 +62,27 @@ const DEFAULT_HIGHT: usize = 30;
 
 impl Map {
     pub fn new(width: usize, height: usize) -> Self {
-        let player = Player {
-            direction: Direction::Up,
-            position: Position { x: 0, y: 0 },
+        let mut rng = rand::rng();
+
+        let tiles = Map::create_maze(width, height);
+
+        let direction = Direction::Up;
+
+        let position = Position {
+            x: rng.random_range(..width),
+            y: rng.random_range(..height),
         };
+
+        let player = Player {
+            direction,
+            position,
+        };
+
         Map {
             width,
             height,
             player,
-            tiles: Map::create_maze(width, height),
+            tiles,
             tiles_cache: canvas::Cache::default(),
         }
     }
