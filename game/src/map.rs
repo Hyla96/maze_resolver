@@ -87,9 +87,40 @@ impl Map {
         }
     }
 
+    pub fn get_player_view(&self) -> Vec<Tile> {
+        // returns up to 3 tiles in front of the player based on direction, if a non-walkable tile is found, stop adding tiles
+
+        let mut view_tiles = Vec::new();
+        let (dx, dy) = match self.player.direction {
+            Direction::Up => (0, -1),
+            Direction::Down => (0, 1),
+            Direction::Left => (-1, 0),
+            Direction::Right => (1, 0),
+        };
+        let mut x = self.player.position.x as isize;
+        let mut y = self.player.position.y as isize;
+
+        for _ in 0..3 {
+            x += dx;
+            y += dy;
+
+            if x < 0 || y < 0 || x >= self.width as isize || y >= self.height as isize {
+                break;
+            }
+
+            let tile = &self.tiles[x as usize][y as usize];
+            view_tiles.push(tile.clone());
+
+            if !tile.walkable {
+                break;
+            }
+        }
+
+        view_tiles
+    }
+
     pub fn create_maze(width: usize, height: usize) -> Vec<Vec<Tile>> {
         let mut rng = rand::rng();
-
         let tiles: Vec<Vec<Tile>> = (0..width)
             .map(|_| {
                 (0..height)
@@ -104,8 +135,6 @@ impl Map {
     }
 
     pub fn view(&'_ self) -> Column<'_, Message> {
-        let view_start = Instant::now();
-
         let canvas_width = (self.width as u32 * SQUARE_SIZE) as f32;
         let canvas_height = (self.height as u32 * SQUARE_SIZE) as f32;
 
@@ -294,6 +323,9 @@ impl canvas::Program<Message> for Map {
                     indicator_color,
                 ),
             }
+
+            let player_view = self.get_player_view();
+            println!("Player view tiles: {:#?}", player_view);
 
             println!(
                 "Player draw: {:.3}ms",
